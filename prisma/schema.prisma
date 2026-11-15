@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TipoServidor {
+  PRINCIPAL
+  DEPARTAMENTO
+}
+
+enum EstadoServidor {
+  PENDENTE
+  APROVADO
+  SUSPENSO
+}
+
+enum OrigemAcao {
+  DISCORD
+  SITE
+  API
+  JOGO
+}
+
+model Servidor {
+  id                 String         @id
+  nome               String
+  tipo               TipoServidor   @default(DEPARTAMENTO)
+  departamento       String?
+  cor                String         @default("#5865F2")
+  logotipo           String?
+  criadoEm           DateTime       @default(now())
+  estado             EstadoServidor @default(PENDENTE)
+  cargoResponsavelId String?
+  aprovadoPor        String?
+  aprovadoEm         DateTime?
+
+  config     Configuracao?
+  modulos    Modulo[]
+  auditoria  Auditoria[]
+  frases     FrasePresence[]
+  pontos     RegistoPonto[]
+  tickets    Ticket[]
+  moderacoes RegistoModeracao[]
+  processos  ProcessoDisciplinar[]
+}
+
+model Configuracao {
+  servidorId   String   @id
+  dados        Json     @default("{}")
+  versao       Int      @default(1)
+  atualizadoEm DateTime @updatedAt
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+}
+
+model Modulo {
+  id         Int     @id @default(autoincrement())
+  servidorId String
+  nome       String
+  ativo      Boolean @default(true)
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@unique([servidorId, nome])
+}
+
+model Auditoria {
+  id          Int        @id @default(autoincrement())
+  servidorId  String
+  autorId     String
+  modulo      String
+  acao        String
+  alvoId      String?
+  antes       Json?
+  depois      Json?
+  origem      OrigemAcao @default(DISCORD)
+  reversivel  Boolean    @default(false)
+  desfeitaEm  DateTime?
+  desfeitaPor String?
+  criadoEm    DateTime   @default(now())
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId, criadoEm])
+  @@index([autorId])
+}
+
+enum EstadoFrase {
+  PENDENTE
+  APROVADA
+  REJEITADA
+}
+
+model FrasePresence {
+  id          Int         @id @default(autoincrement())
+  servidorId  String
+  texto       String
+  ativa       Boolean     @default(true)
+  estado      EstadoFrase @default(APROVADA)
+  criadoPor   String
+  criadoEm    DateTime    @default(now())
+  aprovadoPor String?
+  aprovadoEm  DateTime?
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId])
+  @@index([estado])
+}
+
+model Definicoes {
+  id                Int @id @default(1)
+  intervaloPresence Int @default(30)
+}
+
+// ───────────── Módulos Operacionais ─────────────
+
+enum EstadoTurno {
+  EM_SERVICO
+  EM_PAUSA
+  FECHADO
+}
+
+enum ValidacaoTurno {
+  PENDENTE
+  VALIDADO
+  INVALIDADO
+}
+
+model RegistoPonto {
+  id                Int            @id @default(autoincrement())
+  servidorId        String
+  utilizadorId      String
+  estado            EstadoTurno    @default(EM_SERVICO)
+  entradaEm         DateTime       @default(now())
+  saidaEm           DateTime?
+  pausaIniciadaEm   DateTime?
+  totalMinutosPausa Int            @default(0)
+  totalMinutos      Int            @default(0)
+  validacao         ValidacaoTurno @default(PENDENTE)
+  validadoPor       String?
+  validadoEm        DateTime?
+  motivoInvalido    String?
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId, utilizadorId])
+  @@index([servidorId, estado])
+}
+
+enum TipoTicket {
+  GERAL
+  INTERNO
+}
+
+enum EstadoTicket {
+  ABERTO
+  ASSUMIDO
+  FECHADO
+}
+
+model Ticket {
+  id            Int          @id @default(autoincrement())
+  servidorId    String
+  canalId       String       @unique
+  autorId       String
+  tipo          TipoTicket
+  motivo        String
+  dados         Json         @default("{}")
+  estado        EstadoTicket @default(ABERTO)
+  atendidoPorId String?
+  fechadoPorId  String?
+  fechadoEm     DateTime?
+  criadoEm      DateTime     @default(now())
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId, estado])
+}
+
+enum TipoModeracao {
+  WARN
+  TIMEOUT
+  UNTIMEOUT
+  KICK
+  BAN
+  UNBAN
+}
+
+model RegistoModeracao {
+  id           Int           @id @default(autoincrement())
+  servidorId   String
+  utilizadorId String
+  moderadorId  String
+  tipo         TipoModeracao
+  motivo       String
+  duracaoMin   Int?
+  ativo        Boolean       @default(true)
+  criadoEm     DateTime      @default(now())
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId, utilizadorId])
+}
+
+enum TipoPunicao {
+  ADVERTENCIA_VERBAL
+  ADVERTENCIA_ESCRITA
+  SUSPENSAO
+  DESPROMOCAO
+  EXPULSAO
+}
+
+model ProcessoDisciplinar {
+  id              Int         @id @default(autoincrement())
+  servidorId      String
+  agenteId        String
+  superiorId      String
+  tipo            TipoPunicao
+  motivo          String
+  artigo          String?
+  diasSuspensao   Int?
+  ativo           Boolean     @default(true)
+  revogadoEm      DateTime?
+  revogadoPor     String?
+  motivoRevogacao String?
+  criadoEm        DateTime    @default(now())
+
+  servidor Servidor @relation(fields: [servidorId], references: [id], onDelete: Cascade)
+
+  @@index([servidorId, agenteId])
+}
